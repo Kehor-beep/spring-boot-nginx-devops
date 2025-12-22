@@ -36,7 +36,7 @@ pipeline {
                 sh 'docker build -t spring-boot-nginx-app:latest .'
             }
         }
-`
+
         stage('Deploy Locally') {
             when {
                 allOf {
