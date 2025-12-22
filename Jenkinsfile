@@ -102,28 +102,29 @@ stage('Deploy to EC2') {
     steps {
         sshagent(['ec2-ssh-key']) {
             sh '''
-              ssh -o StrictHostKeyChecking=no ubuntu@13.60.22.37
+              ssh -o StrictHostKeyChecking=no ubuntu@13.60.22.37 "
+                set -e
 
-                echo "==> Ensure Docker network exists"
+                echo '==> Ensure Docker network exists'
                 docker network create app-network || true
 
-                echo "==> Stop old containers (if any)"
+                echo '==> Stop old containers'
                 docker stop spring-web-app || true
                 docker rm spring-web-app || true
                 docker stop nginx || true
                 docker rm nginx || true
 
-                echo "==> Pull application image from registry"
+                echo '==> Pull application image'
                 docker pull camildockerhub/spring-boot-nginx-app:latest
 
-                echo "==> Start Spring Boot container (detached from SSH)"
+                echo '==> Start Spring Boot container (detached)'
                 nohup docker run -d \
                   --name spring-web-app \
                   --network app-network \
                   camildockerhub/spring-boot-nginx-app:latest \
                   >/dev/null 2>&1 &
 
-                echo "==> Start Nginx container"
+                echo '==> Start Nginx container'
                 docker run -d \
                   --name nginx \
                   --network app-network \
@@ -131,7 +132,8 @@ stage('Deploy to EC2') {
                   -v /home/ubuntu/nginx:/etc/nginx/conf.d:ro \
                   nginx:latest
 
-                echo "==> Deployment finished successfully"
+                echo '==> Deployment finished successfully'
+              "
             '''
         }
     }
