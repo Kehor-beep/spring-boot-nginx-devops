@@ -102,8 +102,7 @@ stage('Deploy to EC2') {
     steps {
         sshagent(['ec2-ssh-key']) {
             sh '''
-              ssh -o StrictHostKeyChecking=no ubuntu@13.60.22.37 << 'EOF'
-                set -e
+              ssh -o StrictHostKeyChecking=no ubuntu@13.60.22.37
 
                 echo "==> Ensure Docker network exists"
                 docker network create app-network || true
@@ -133,7 +132,6 @@ stage('Deploy to EC2') {
                   nginx:latest
 
                 echo "==> Deployment finished successfully"
-              EOF
             '''
         }
     }
