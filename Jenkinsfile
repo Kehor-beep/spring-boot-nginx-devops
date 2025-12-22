@@ -99,38 +99,33 @@ pipeline {
                     expression { params.ENV == 'remote' }
                 }
             }
-            steps {
-                sshagent(['ec2-ssh-key']) {
-                    sh '''
-                      ssh -o StrictHostKeyChecking=no ubuntu@13.60.22.37 "
-                        echo 'Ensuring network exists...'
-                        docker network create app-network || true
+    sshagent(['ec2-ssh-key']) {
+    sh '''
+      ssh -o StrictHostKeyChecking=no ubuntu@13.60.22.37 "
+        docker network create app-network || true
 
-                        echo 'Stopping old containers...'
-                        docker stop spring-web-app || true
-                        docker rm spring-web-app || true
-                        docker stop nginx || true
-                        docker rm nginx || true
+        docker stop spring-web-app || true
+        docker rm spring-web-app || true
+        docker stop nginx || true
+        docker rm nginx || true
 
-                        echo 'Pulling image from registry...'
-                        docker pull camildockerhub/spring-boot-nginx-app:latest
+        docker pull camildockerhub/spring-boot-nginx-app:latest
 
-                        echo 'Starting Spring Boot app...'
-                        docker run -d \
-                          --name spring-web-app \
-                          --network app-network \
-                         camildockerhub/ spring-boot-nginx-app:latest
+        nohup docker run -d \
+          --name spring-web-app \
+          --network app-network \
+          camildockerhub/spring-boot-nginx-app:latest \
+          >/dev/null 2>&1 &
 
-                        echo 'Starting Nginx...'
-                        docker run -d \
-                          --name nginx \
-                          --network app-network \
-                          -p 80:80 \
-                          -v $(pwd)/nginx:/etc/nginx/conf.d:ro \
-                          nginx:latest
-                      "
-                    '''
-                }
+        docker run -d \
+          --name nginx \
+          --network app-network \
+          -p 80:80 \
+          -v $(pwd)/nginx:/etc/nginx/conf.d:ro \
+          nginx:latest
+      "
+    '''
+               }
             }
         }
     }
