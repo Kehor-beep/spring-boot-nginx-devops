@@ -92,41 +92,50 @@ pipeline {
                 '''
             }
         }
-        stage('Deploy to EC2') {
-            when {
-                allOf {
-                    expression { params.DEPLOY }
-                    expression { params.ENV == 'remote' }
-                }
-            }
-   steps {
-    sshagent(['ec2-ssh-key']) {
-    sh '''
-      ssh -o StrictHostKeyChecking=no ubuntu@13.60.22.37 "
-        docker network create app-network || true
-
-        docker stop spring-web-app || true
-        docker rm spring-web-app || true
-        docker stop nginx || true
-        docker rm nginx || true
-
-        docker pull camildockerhub/spring-boot-nginx-app:latest
-
-        nohup docker run -d \
-          --name spring-web-app \
-          --network app-network \
-          camildockerhub/spring-boot-nginx-app:latest \
-          >/dev/null 2>&1 &
-
-        docker run -d \
-          --name nginx \
-          --network app-network \
-          -p 80:80 \
-          -v $(pwd)/nginx:/etc/nginx/conf.d:ro \
-          nginx:latest
-      "
-    '''
-               }
-            }
+stage('Deploy to EC2') {
+    when {
+        allOf {
+            expression { params.DEPLOY }
+            expression { params.ENV == 'remote' }
         }
+    }
+    steps {
+        sshagent(['ec2-ssh-key']) {
+            sh '''
+              ssh -o StrictHostKeyChecking=no ubuntu@13.60.22.37 << 'EOF'
+                set -e
+
+                echo "==> Ensure Docker network exists"
+                docker network create app-network || true
+
+                echo "==> Stop old containers (if any)"
+                docker stop spring-web-app || true
+                docker rm spring-web-app || true
+                docker stop nginx || true
+                docker rm nginx || true
+
+                echo "==> Pull application image from registry"
+                docker pull camildockerhub/spring-boot-nginx-app:latest
+
+                echo "==> Start Spring Boot container (detached from SSH)"
+                nohup docker run -d \
+                  --name spring-web-app \
+                  --network app-network \
+                  camildockerhub/spring-boot-nginx-app:latest \
+                  >/dev/null 2>&1 &
+
+                echo "==> Start Nginx container"
+                docker run -d \
+                  --name nginx \
+                  --network app-network \
+                  -p 80:80 \
+                  -v /home/ubuntu/nginx:/etc/nginx/conf.d:ro \
+                  nginx:latest
+
+                echo "==> Deployment finished successfully"
+              EOF
+            '''
+        }
+    }
+}
     }
