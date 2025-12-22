@@ -37,6 +37,27 @@ pipeline {
             }
         }
 
+        stage('Push Image to Registry') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                      echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+
+                      docker tag spring-boot-nginx-app:latest \
+                        $DOCKER_USER/spring-boot-nginx-app:latest
+
+                      docker push $DOCKER_USER/spring-boot-nginx-app:latest
+
+                      docker logout
+                    '''
+                }
+            }
+        }
+
         stage('Deploy Locally') {
             when {
                 allOf {
@@ -91,11 +112,14 @@ pipeline {
                         docker stop nginx || true
                         docker rm nginx || true
 
+                        echo 'Pulling image from registry...'
+                        docker pull camildockerhub/spring-boot-nginx-app:latest
+
                         echo 'Starting Spring Boot app...'
                         docker run -d \
                           --name spring-web-app \
                           --network app-network \
-                          spring-boot-nginx-app:latest
+                         camildockerhub/ spring-boot-nginx-app:latest
 
                         echo 'Starting Nginx...'
                         docker run -d \
