@@ -99,6 +99,7 @@ pipeline {
                     expression { params.ENV == 'remote' }
                 }
             }
+   steps {
     sshagent(['ec2-ssh-key']) {
     sh '''
       ssh -o StrictHostKeyChecking=no ubuntu@13.60.22.37 "
