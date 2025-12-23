@@ -139,23 +139,34 @@ pipeline {
 			}
 		}
 
-		stage('Health Check') {
-			when {
-				expression { params.DEPLOY }
-			}
-			steps {
-				sh '''
-					if [ "${ENV}" = "local" ]; then
-						echo "Checking local deployment..."
-							curl -f http://localhost
-					else
-						echo "Checking remote deployment..."
-							curl -f http://13.48.147.254
-							fi
-							'''
-			}
-		}
+stage('Health Check') {
+    when {
+        expression { params.DEPLOY }
+    }
+    steps {
+        sh '''
+          echo "Waiting for application to become healthy..."
 
+          if [ "${ENV}" = "local" ]; then
+            URL="http://localhost"
+          else
+            URL="http://13.48.147.254"
+          fi
+
+          for i in {1..20}; do
+            echo "Health check attempt $i..."
+            if curl -f "$URL" >/dev/null 2>&1; then
+              echo "Application is healthy!"
+              exit 0
+            fi
+            sleep 3
+          done
+
+          echo "Application did not become healthy in time"
+          exit 1
+        '''
+    }
+}
 
 	}
 }
