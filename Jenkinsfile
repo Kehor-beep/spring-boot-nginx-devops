@@ -102,7 +102,7 @@ pipeline {
 			steps {
 				sshagent(['ec2-ssh-key']) {
 					sh '''
-						ssh -o StrictHostKeyChecking=no ubuntu@13.60.22.37 "
+						ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 "
 						set -e
 
 						echo '==> Ensure Docker network exists'
@@ -150,7 +150,7 @@ pipeline {
 							curl -f http://localhost
 					else
 						echo "Checking remote deployment..."
-							curl -f http://13.60.22.37
+							curl -f http://13.48.147.254
 							fi
 							'''
 			}
