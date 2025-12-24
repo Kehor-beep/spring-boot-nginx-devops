@@ -17,6 +17,9 @@ pipeline {
 						defaultValue: '',
 						description: 'Build number to rollback to (leave empty for normal deploy)'
 				      )
+				environment {
+					DEPLOY_VERSION = "${params.ROLLBACK_VERSION ?: BUILD_NUMBER}"
+				}
 
 		}
 
@@ -72,10 +75,6 @@ pipeline {
 						'''
 				}
 			}
-		}
-
-		environment {
-			DEPLOY_VERSION = "${params.ROLLBACK_VERSION ?: BUILD_NUMBER}"
 		}
 
 		stage('Deploy Locally') {
