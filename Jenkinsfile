@@ -33,10 +33,12 @@ pipeline {
 
 		stage('Build Docker Image') {
 			steps {
-				docker build \
+				sh '''
+					docker build \
 					-t spring-boot-nginx-app:${BUILD_NUMBER} \
 					-t spring-boot-nginx-app:latest \
 					.
+					'''
 			}
 		}
 
@@ -125,12 +127,12 @@ pipeline {
 						echo '==> Pull application image'
 						docker pull camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}
 
-						echo '==> Start Spring Boot container (detached)'
+					echo '==> Start Spring Boot container (detached)'
 						nohup docker run -d \
 						--name spring-web-app \
 						--network app-network \
 						camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}
-						>/dev/null 2>&1 &
+					>/dev/null 2>&1 &
 
 						echo '==> Start Nginx container'
 						docker run -d \
