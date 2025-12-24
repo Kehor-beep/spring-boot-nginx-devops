@@ -33,7 +33,10 @@ pipeline {
 
 		stage('Build Docker Image') {
 			steps {
-				sh 'docker build -t spring-boot-nginx-app:latest .'
+				docker build \
+					-t spring-boot-nginx-app:${BUILD_NUMBER} \
+					-t spring-boot-nginx-app:latest \
+					.
 			}
 		}
 
@@ -47,10 +50,15 @@ pipeline {
 					sh '''
 						echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-						docker tag spring-boot-nginx-app:latest \
+						docker tag spring-boot-nginx-app:${BUILD_NUMBER} \
+						$DOCKER_USER/spring-boot-nginx-app:${BUILD_NUMBER}
+
+					docker tag spring-boot-nginx-app:${BUILD_NUMBER} \
 						$DOCKER_USER/spring-boot-nginx-app:latest
 
-						docker push $DOCKER_USER/spring-boot-nginx-app:latest
+
+						docker push $DOCKER_USER/spring-boot-nginx-app:${BUILD_NUMBER}
+					docker push $DOCKER_USER/spring-boot-nginx-app:latest
 
 						docker logout
 						'''
@@ -115,13 +123,13 @@ pipeline {
 						docker rm nginx || true
 
 						echo '==> Pull application image'
-						docker pull camildockerhub/spring-boot-nginx-app:latest
+						docker pull camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}
 
 						echo '==> Start Spring Boot container (detached)'
 						nohup docker run -d \
 						--name spring-web-app \
 						--network app-network \
-						camildockerhub/spring-boot-nginx-app:latest \
+						camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}
 						>/dev/null 2>&1 &
 
 						echo '==> Start Nginx container'
