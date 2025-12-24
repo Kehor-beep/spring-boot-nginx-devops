@@ -12,6 +12,12 @@ pipeline {
 						choices: ['local', 'remote'],
 						description: 'Deployment environment'
 				      )
+				string(
+						name: 'ROLLBACK_VERSION',
+						defaultValue: '',
+						description: 'Build number to rollback to (leave empty for normal deploy)'
+				      )
+
 		}
 
 	tools {
@@ -35,7 +41,7 @@ pipeline {
 			steps {
 				sh '''
 					docker build \
-					-t spring-boot-nginx-app:${BUILD_NUMBER} \
+					-t spring-boot-nginx-app:${DEPLOY_VERSION} \
 					-t spring-boot-nginx-app:latest \
 					.
 					'''
@@ -52,20 +58,24 @@ pipeline {
 					sh '''
 						echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-						docker tag spring-boot-nginx-app:${BUILD_NUMBER} \
-						$DOCKER_USER/spring-boot-nginx-app:${BUILD_NUMBER}
+						docker tag spring-boot-nginx-app:${DEPLOY_VERSION} \
+						$DOCKER_USER/spring-boot-nginx-app:${DEPLOY_VERSION}
 
-					docker tag spring-boot-nginx-app:${BUILD_NUMBER} \
+					docker tag spring-boot-nginx-app:${DEPLOY_VERSION} \
 						$DOCKER_USER/spring-boot-nginx-app:latest
 
 
-						docker push $DOCKER_USER/spring-boot-nginx-app:${BUILD_NUMBER}
+						docker push $DOCKER_USER/spring-boot-nginx-app:${DEPLOY_VERSION}
 					docker push $DOCKER_USER/spring-boot-nginx-app:latest
 
 						docker logout
 						'''
 				}
 			}
+		}
+
+		environment {
+			DEPLOY_VERSION = "${params.ROLLBACK_VERSION ?: BUILD_NUMBER}"
 		}
 
 		stage('Deploy Locally') {
@@ -125,13 +135,13 @@ pipeline {
 						docker rm nginx || true
 
 						echo '==> Pull application image'
-						docker pull camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}
+						docker pull camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
 
 					echo '==> Start Spring Boot container (detached)'
 						nohup docker run -d \
 						--name spring-web-app \
 						--network app-network \
-						camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}
+						camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
 					>/dev/null 2>&1 &
 
 						echo '==> Start Nginx container'
