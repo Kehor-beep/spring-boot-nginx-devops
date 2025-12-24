@@ -113,7 +113,9 @@ pipeline {
 					'''
 			}
 		}
-		stage('Deploy to EC2') {
+
+
+		stage('Deploy to EC2 (Blue/Green)') {
 			when {
 				allOf {
 					expression { params.DEPLOY }
@@ -126,36 +128,58 @@ pipeline {
 						ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 "
 						set -e
 
-						echo '==> Ensure Docker network exists'
-						docker network create app-network || true
+						echo '==> Detecting active color'
+						if docker ps --format '{{.Names}}' | grep -q spring-web-app-blue; then
+							ACTIVE=blue
+								INACTIVE=green
+						else
+							ACTIVE=green
+								INACTIVE=blue
+								fi
 
-						echo '==> Stop old containers'
-						docker stop spring-web-app || true
-						docker rm spring-web-app || true
-						docker stop nginx || true
-						docker rm nginx || true
+								echo \"Active color: $ACTIVE\"
+								echo \"Deploying color: $INACTIVE\"
 
-						echo '==> Pull application image'
-						docker pull camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
+								echo '==> Ensure network exists'
+								docker network create app-network || true
 
-					echo '==> Start Spring Boot container (detached)'
-						nohup docker run -d \
-						--name spring-web-app \
+								echo '==> Pull image'
+								docker pull camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
+
+					echo '==> Stop inactive container if exists'
+						docker stop spring-web-app-$INACTIVE || true
+						docker rm spring-web-app-$INACTIVE || true
+
+						echo '==> Start new container'
+						docker run -d \
+						--name spring-web-app-$INACTIVE \
 						--network app-network \
 						camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
-					>/dev/null 2>&1 &
 
-						echo '==> Start Nginx container'
-						docker run -d \
-						--name nginx \
-						--network app-network \
-						-p 80:80 \
-						-v /home/ubuntu/nginx:/etc/nginx/conf.d:ro \
-						nginx:latest
+					echo '==> Waiting for new container to become healthy'
+						i=1
+						while [ $i -le 20 ]; do
+							if docker exec spring-web-app-$INACTIVE curl -f http://localhost:8080 >/dev/null 2>&1; then
+								echo 'New version is healthy'
+									break
+									fi
+									sleep 3
+									i=$((i+1))
+									done
 
-						echo '==> Deployment finished successfully'
-						"
-						'''
+									if [ $i -gt 20 ]; then
+										echo 'New version did not become healthy'
+											exit 1
+											fi
+
+											echo '==> Switching Nginx to new color'
+											sed -i \"s/spring-web-app-$ACTIVE/spring-web-app-$INACTIVE/\" /home/ubuntu/nginx/default.conf
+
+											docker exec nginx nginx -s reload
+
+											echo '==> Blue/Green switch completed successfully'
+											"
+											'''
 				}
 			}
 		}
