@@ -142,7 +142,7 @@ pipeline {
 											sed -i "s/spring-web-app-$ACTIVE/spring-web-app-$INACTIVE/" /home/ubuntu/nginx/default.conf
 											docker exec nginx nginx -s reload
 
-											echo "==> Blue/Green switch complete"
+											echo "==> Blue-Green switch complete"
 
 											"
 											'''
