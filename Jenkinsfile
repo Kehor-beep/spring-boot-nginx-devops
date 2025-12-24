@@ -25,6 +25,13 @@ pipeline {
 
 	stages {
 
+		stage('Clean Workspace') {
+			steps {
+				deleteDir()
+			}
+		}
+
+
 		stage('Build & Test') {
 			steps {
 				sh './mvnw clean package'
