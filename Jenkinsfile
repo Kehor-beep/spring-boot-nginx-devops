@@ -1,226 +1,158 @@
 pipeline {
-	agent any
+    agent any
 
-		parameters {
-			booleanParam(
-					name: 'DEPLOY',
-					defaultValue: false,
-					description: 'Deploy after successful build?'
-				    )
-				choice(
-						name: 'ENV',
-						choices: ['local', 'remote'],
-						description: 'Deployment environment'
-				      )
-				string(
-						name: 'ROLLBACK_VERSION',
-						defaultValue: '',
-						description: 'Build number to rollback to (leave empty for normal deploy)'
-				      )
+    parameters {
+        booleanParam(
+            name: 'DEPLOY',
+            defaultValue: false,
+            description: 'Deploy after successful build'
+        )
+        choice(
+            name: 'ENV',
+            choices: ['local', 'remote'],
+            description: 'Deployment environment'
+        )
+        string(
+            name: 'ROLLBACK_VERSION',
+            defaultValue: '',
+            description: 'Rollback to build number (optional)'
+        )
+    }
 
-		}
+    environment {
+        DEPLOY_VERSION = "${params.ROLLBACK_VERSION ?: BUILD_NUMBER}"
+    }
 
-	environment {
-		DEPLOY_VERSION = "${params.ROLLBACK_VERSION ?: BUILD_NUMBER}"
-	}
+    stages {
 
+        stage('Build & Test') {
+            steps {
+                sh './mvnw clean package'
+            }
+        }
 
-	tools {
-		jdk 'jdk21'
-	}
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                  docker build \
+                    -t spring-boot-nginx-app:${BUILD_NUMBER} \
+                    -t spring-boot-nginx-app:latest \
+                    .
+                '''
+            }
+        }
 
-	stages {
-		stage('Checkout') {
-			steps {
-				checkout scm
-			}
-		}
+        stage('Push Image to Registry') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                      echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-		stage('Build & Test') {
-			steps {
-				sh './mvnw clean package'
-			}
-		}
+                      docker tag spring-boot-nginx-app:${BUILD_NUMBER} \
+                        $DOCKER_USER/spring-boot-nginx-app:${BUILD_NUMBER}
 
-		stage('Build Docker Image') {
-			steps {
-				sh '''
-					docker build \
-					-t spring-boot-nginx-app:${DEPLOY_VERSION} \
-					-t spring-boot-nginx-app:latest \
-					.
-					'''
-			}
-		}
+                      docker push $DOCKER_USER/spring-boot-nginx-app:${BUILD_NUMBER}
+                      docker push $DOCKER_USER/spring-boot-nginx-app:latest
 
-		stage('Push Image to Registry') {
-			steps {
-				withCredentials([usernamePassword(
-							credentialsId: 'dockerhub-creds',
-							usernameVariable: 'DOCKER_USER',
-							passwordVariable: 'DOCKER_PASS'
-							)]) {
-					sh '''
-						echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                      docker logout
+                    '''
+                }
+            }
+        }
 
-						docker tag spring-boot-nginx-app:${DEPLOY_VERSION} \
-						$DOCKER_USER/spring-boot-nginx-app:${DEPLOY_VERSION}
+        stage('Deploy to EC2 (Blue/Green)') {
+            when {
+                allOf {
+                    expression { params.DEPLOY }
+                    expression { params.ENV == 'remote' }
+                }
+            }
+            steps {
+                sshagent(['ec2-ssh-key']) {
+                    sh '''
+                      ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 "
+                        set -e
+                        set -u
 
-					docker tag spring-boot-nginx-app:${DEPLOY_VERSION} \
-						$DOCKER_USER/spring-boot-nginx-app:latest
+                        echo 'Detecting active color'
+                        if grep -q spring-web-app-blue /home/ubuntu/nginx/default.conf; then
+                          ACTIVE=blue
+                          INACTIVE=green
+                        elif grep -q spring-web-app-green /home/ubuntu/nginx/default.conf; then
+                          ACTIVE=green
+                          INACTIVE=blue
+                        else
+                          echo 'Cannot detect active color'
+                          exit 1
+                        fi
 
+                        echo \"Active color: $ACTIVE\"
+                        echo \"Deploying color: $INACTIVE\"
 
-						docker push $DOCKER_USER/spring-boot-nginx-app:${DEPLOY_VERSION}
-					docker push $DOCKER_USER/spring-boot-nginx-app:latest
+                        docker network create app-network || true
+                        docker pull camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
 
-						docker logout
-						'''
-				}
-			}
-		}
+                        docker stop spring-web-app-$INACTIVE || true
+                        docker rm spring-web-app-$INACTIVE || true
 
-		stage('Deploy Locally') {
-			when {
-				allOf {
-					expression { params.DEPLOY }
-					expression { params.ENV == 'local' }
-				}
-			}
-			steps {
-				sh '''
-					echo "Ensuring network exists..."
-					docker network create app-network || true
+                        docker run -d \
+                          --name spring-web-app-$INACTIVE \
+                          --network app-network \
+                          camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
 
-					echo "Stopping old containers..."
-					docker stop spring-web-app || true
-					docker rm spring-web-app || true
-					docker stop nginx || true
-					docker rm nginx || true
+                        i=1
+                        while [ $i -le 20 ]; do
+                          if docker exec spring-web-app-$INACTIVE curl -f http://localhost:8080 >/dev/null 2>&1; then
+                            break
+                          fi
+                          sleep 3
+                          i=$((i+1))
+                        done
 
-					echo "Starting Spring Boot app..."
-					docker run -d \
-					--name spring-web-app \
-					--network app-network \
-					spring-boot-nginx-app:latest
+                        if [ $i -gt 20 ]; then
+                          echo 'New version not healthy'
+                          exit 1
+                        fi
 
-					echo "Starting Nginx..."
-					docker run -d \
-					--name nginx \
-					--network app-network \
-					-p 80:80 \
-					-v $(pwd)/nginx:/etc/nginx/conf.d:ro \
-					nginx:latest
-					'''
-			}
-		}
+                        sed -i \"s/spring-web-app-$ACTIVE/spring-web-app-$INACTIVE/\" /home/ubuntu/nginx/default.conf
+                        docker exec nginx nginx -s reload
 
+                        echo 'Blue/Green switch complete'
+                      "
+                    '''
+                }
+            }
+        }
 
-		stage('Deploy to EC2 (Blue/Green)') {
-			when {
-				allOf
-					expression { params.DEPLOY }
-				expression { params.ENV == 'remote' }
-			}
-		}
-		steps {
-			sshagent(['ec2-ssh-key']) {
-				sh '''
-					ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 "
-					set -e
-                                        set -u
+        stage('Health Check') {
+            when {
+                expression { params.DEPLOY }
+            }
+            steps {
+                sh '''
+                  if [ "${ENV}" = "local" ]; then
+                    URL=http://localhost
+                  else
+                    URL=http://13.48.147.254
+                  fi
 
-					echo '==> Detecting active color from Nginx config'
+                  i=1
+                  while [ $i -le 20 ]; do
+                    if curl -f "$URL" >/dev/null 2>&1; then
+                      exit 0
+                    fi
+                    sleep 3
+                    i=$((i+1))
+                  done
 
-					if grep -q spring-web-app-blue /home/ubuntu/nginx/default.conf; then
-					        	ACTIVE=blue
-							INACTIVE=green
-
-							elif grep -q spring-web-app-green /home/ubuntu/nginx/default.conf; then
-
-							ACTIVE=green
-							INACTIVE=blue
-					else
-						echo 'ERROR: Could not detect active color from Nginx config'
-							exit 1
-							fi
-
-							echo "Active color: $ACTIVE"
-							echo "Deploying color: $INACTIVE"
-
-							echo '==> Ensure network exists'
-							docker network create app-network || true
-
-							echo '==> Pull image'
-							docker pull camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
-
-				echo '==> Stop inactive container if exists'
-					docker stop spring-web-app-$INACTIVE || true
-					docker rm spring-web-app-$INACTIVE || true
-
-					echo '==> Start new container'
-					docker run -d \
-					--name spring-web-app-$INACTIVE \
-					--network app-network \
-					camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
-
-				echo '==> Waiting for new container to become healthy'
-					i=1
-					while [ $i -le 20 ]; do
-						if docker exec spring-web-app-$INACTIVE curl -f http://localhost:8080 >/dev/null 2>&1; then
-							echo 'New version is healthy'
-								break
-								fi
-								sleep 3
-								i=$((i+1))
-								done
-
-								if [ $i -gt 20 ]; then
-									echo 'New version did not become healthy'
-										exit 1
-										fi
-
-										echo '==> Switching Nginx to new color'
-										sed -i \"s/spring-web-app-$ACTIVE/spring-web-app-$INACTIVE/\" /home/ubuntu/nginx/default.conf
-
-										docker exec nginx nginx -s reload
-
-										echo '==> Blue/Green switch completed successfully'
-										"
-										'''
-			}
-		}
-	}
-
-	stage('Health Check') {
-		when {
-			expression { params.DEPLOY }
-		}
-		steps {
-			sh '''
-				echo "Waiting for application to become healthy..."
-
-				if [ "${ENV}" = "local" ]; then
-					URL="http://localhost"
-						echo "Target environment: local"
-				else
-					URL="http://13.48.147.254"
-						echo "Target environment: remote"
-						fi
-
-						i=1
-						while [ $i -le 20 ]; do
-							echo "Health check attempt $i..."
-								if curl -f "$URL" >/dev/null 2>&1; then
-									echo "Application is healthy!"
-										exit 0
-										fi
-										i=$((i+1))
-										sleep 3
-										done
-
-										echo "Application did not become healthy in time"
-										exit 1
-										'''
-		}
-	}
+                  exit 1
+                '''
+            }
+        }
+    }
 }
+
