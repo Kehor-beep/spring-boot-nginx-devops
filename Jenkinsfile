@@ -64,7 +64,7 @@ pipeline {
 			}
 		}
 
-		stage('Deploy to EC2 (Blue/Green)') {
+		stage('Deploy to EC2 (Blue-Green)') {
 			when {
 				allOf {
 					expression { params.DEPLOY }
