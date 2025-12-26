@@ -113,7 +113,7 @@ docker run -d \
                   i=1
                   while [ "$i" -le 20 ]; do
                     if curl -f "$URL" >/dev/null 2>&1; then
-                      echo "Application is healthy"
+                      echo "Application is healthy via Nginx"
                       exit 0
                     fi
                     sleep 3
