@@ -120,7 +120,6 @@ pipeline {
 
 	}
 }
-}
 
 stage('Health Check') {
 	when {
