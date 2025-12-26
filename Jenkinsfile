@@ -71,8 +71,7 @@ pipeline {
 				}
 			}
 		}
-
-		stage('Deploy to EC2 Blue or Green') {
+		stage('Deploy to EC2') {
 			when {
 				allOf {
 					expression { params.DEPLOY }
@@ -82,116 +81,72 @@ pipeline {
 			steps {
 				sshagent(['ec2-ssh-key']) {
 					sh '''
-						ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 "
+						ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254
 						set -e
 
-						echo "==> Detecting active color from Nginx config"
+						echo "==> Ensure network exists"
+						docker network inspect app-network >/dev/null 2>&1 || docker network create app-network
 
-						ACTIVE=""
-						INACTIVE=""
+						echo "==> Pull app image"
+						docker pull camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
 
-						if grep -q "spring-web-app-blue" /home/ubuntu/nginx/default.conf; then
-							ACTIVE="blue"
-								INACTIVE="green"
-								elif grep -q "spring-web-app-green" /home/ubuntu/nginx/default.conf; then
-								ACTIVE="green"
-								INACTIVE="blue"
-						else
-							echo "ERROR: Cannot detect active color in Nginx config"
-								echo "Current config:"
-								cat /home/ubuntu/nginx/default.conf
-								exit 1
-								fi
+					echo "==> Stop old app if exists"
+						docker stop spring-web-app || true
+						docker rm spring-web-app || true
 
-								echo "Active color: $ACTIVE"
-								echo "Deploying color: $INACTIVE"
-
-								echo "==> Ensuring network exists"
-								docker network inspect app-network >/dev/null 2>&1 || docker network create app-network
-
-								echo "==> Pulling image version ${DEPLOY_VERSION}"
-								docker pull camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
-
-					echo "==> Replacing inactive container"
-						docker stop spring-web-app-$INACTIVE || true
-						docker rm spring-web-app-$INACTIVE || true
-
+						echo "==> Start app container"
 						docker run -d \
-						--name spring-web-app-$INACTIVE \
+						--name spring-web-app \
 						--network app-network \
 						camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
 
-					echo "==> Waiting for new container to become healthy"
+					echo "==> Ensure nginx is running"
+						docker stop nginx || true
+						docker rm nginx || true
 
-						i=1
-						while [ "${i:-0}" -le 20 ]; do
-							if docker exec spring-web-app-$INACTIVE curl -f http://localhost:8080 >/dev/null 2>&1; then
-								echo "New version is healthy"
-									break
-									fi
-									sleep 3
-									i=$((i+1))
-									done
+						docker run -d \
+						--name nginx \
+						--network app-network \
+						-p 80:80 \
+						-v /home/ubuntu/nginx:/etc/nginx/conf.d \
+						nginx:latest
 
-									if [ "${i:-0}" -gt 20 ]; then
-										echo "ERROR: New version did not become healthy"
-											exit 1
-											fi
+						echo "==> Deployment complete"
 
-
-											echo "==> Switching Nginx to new color"
-											sed -i "s/spring-web-app-$ACTIVE/spring-web-app-$INACTIVE/" /home/ubuntu/nginx/default.conf
-
-											echo "==> Ensuring nginx is running"
-
-											if ! docker ps --format '{{.Names}}' | grep -q '^nginx$'; then
-												echo "Nginx not running, starting it"
-													docker run -d \
-													--name nginx \
-													--network app-network \
-													-p 80:80 \
-													-v /home/ubuntu/nginx:/etc/nginx/conf.d \
-													nginx:latest
-											else
-												echo "Nginx already running"
-													fi
-
-													echo "==> Reloading nginx"
-													docker exec nginx nginx -s reload
-
-													echo "==> Blue-Green switch complete"
-
-													"
-													'''
+						'''
 				}
 			}
 		}
 
-		stage('Health Check') {
-			when {
-				expression { params.DEPLOY }
-			}
-			steps {
-				sh '''
-					if [ "${ENV}" = "local" ]; then
-						URL=http://localhost
-					else
-						URL=http://13.48.147.254
-							fi
-
-							i=1
-							while [ $i -le 20 ]; do
-								if curl -f "$URL" >/dev/null 2>&1; then
-									exit 0
-										fi
-										sleep 3
-										i=$((i+1))
-										done
-
-										exit 1
-										'''
-			}
-		}
 	}
+}
+}
+
+stage('Health Check') {
+	when {
+		expression { params.DEPLOY }
+	}
+	steps {
+		sh '''
+			if [ "${ENV}" = "local" ]; then
+				URL=http://localhost
+			else
+				URL=http://13.48.147.254
+					fi
+
+					i=1
+					while [ $i -le 20 ]; do
+						if curl -f "$URL" >/dev/null 2>&1; then
+							exit 0
+								fi
+								sleep 3
+								i=$((i+1))
+								done
+
+								exit 1
+								'''
+	}
+}
+}
 }
 
