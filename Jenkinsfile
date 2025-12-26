@@ -156,7 +156,7 @@ pipeline {
 				expression { params.DEPLOY }
 			}
 			steps {
-				sh '
+				sh '''
 					if [ "${ENV}" = "local" ]; then
 						URL=http://localhost
 					else
