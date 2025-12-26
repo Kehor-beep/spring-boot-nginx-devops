@@ -9,7 +9,7 @@ pipeline {
         )
         choice(
             name: 'ENV',
-            choices: ['local', 'remote'],
+            choices: ['remote'],
             description: 'Deployment environment'
         )
         string(
@@ -17,10 +17,6 @@ pipeline {
             defaultValue: '',
             description: 'Rollback to build number (optional)'
         )
-    }
-
-    environment {
-        DEPLOY_VERSION = "${params.ROLLBACK_VERSION ?: BUILD_NUMBER}"
     }
 
     stages {
@@ -70,7 +66,9 @@ pipeline {
                 }
             }
         }
-
+   environment {
+        DEPLOY_VERSION = "${params.ROLLBACK_VERSION ?: BUILD_NUMBER}"
+    }
         stage('Deploy to EC2') {
             when {
                 allOf {
