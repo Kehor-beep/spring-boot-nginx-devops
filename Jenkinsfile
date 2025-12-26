@@ -1,6 +1,12 @@
 pipeline {
     agent any
 
+    environment {
+        IMAGE_NAME = "camildockerhub/spring-boot-nginx-app"
+        IMAGE_TAG  = "${BUILD_NUMBER}"
+        }
+
+
     parameters {
         booleanParam(
             name: 'DEPLOY',
@@ -73,50 +79,31 @@ pipeline {
 
         stage('Deploy to EC2') {
             when {
-                allOf {
-                    expression { params.DEPLOY }
-                    expression { params.ENV == 'remote' }
-                }
+                expression { params.DEPLOY == true }
             }
             steps {
-                sshagent(['ec2-ssh-key']) {
-                    sh '''
-ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 << 'EOF'
-set -e
+                sshagent(['ubuntu']) {
+                    sh """
+                    ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 << EOF
 
-echo "==> Ensure Docker network exists"
-docker network inspect app-network >/dev/null 2>&1 || docker network create app-network
+                      echo "Using image: ${IMAGE_NAME}:${IMAGE_TAG}"
 
-echo "==> Pull app image"
-docker pull camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
+                      docker pull ${IMAGE_NAME}:${IMAGE_TAG}
 
-echo "==> Stop old app container if exists"
-docker stop spring-web-app || true
-docker rm spring-web-app || true
+                      docker stop spring-app || true
+                      docker rm spring-app || true
 
-echo "==> Start app container"
-docker run -d \
-  --name spring-web-app \
-  --network app-network \
-  camildockerhub/spring-boot-nginx-app:${DEPLOY_VERSION}
+                      docker run -d \\
+                        --name spring-app \\
+                        -p 8080:8080 \\
+                        ${IMAGE_NAME}:${IMAGE_TAG}
 
-echo "==> Restart nginx"
-docker stop nginx || true
-docker rm nginx || true
-
-docker run -d \
-  --name nginx \
-  --network app-network \
-  -p 80:80 \
-  -v /home/ubuntu/nginx:/etc/nginx/conf.d \
-  nginx:latest
-
-echo "==> Deployment complete"
-EOF
-                    '''
+                    EOF
+                    """
                 }
             }
         }
+
 
         stage('Health Check') {
             when {
