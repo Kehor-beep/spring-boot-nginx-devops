@@ -80,24 +80,22 @@ pipeline {
                 expression { params.DEPLOY == true }
             }
             steps {
-                sshagent(['ubuntu']) {
-                    sh """
-                    ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 << EOF
+                sshagent(['ec2-ssh-key']) {
+                    sh '''
+        ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 << 'EOF'
+        echo "Deploying image: camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}"
 
-                      echo "Deploying image: ${IMAGE_NAME}:${IMAGE_TAG}"
+        docker pull camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}
 
-                      docker pull ${IMAGE_NAME}:${IMAGE_TAG}
+        docker stop spring-app || true
+        docker rm spring-app || true
 
-                      docker stop spring-app || true
-                      docker rm spring-app || true
-
-                      docker run -d \\
-                        --name spring-app \\
-                        -p 8080:8080 \\
-                        ${IMAGE_NAME}:${IMAGE_TAG}
-
-                    EOF
-                    """
+        docker run -d \
+          --name spring-app \
+          -p 8080:8080 \
+          camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}
+        EOF
+        '''
                 }
             }
         }
