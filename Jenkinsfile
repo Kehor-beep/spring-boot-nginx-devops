@@ -124,7 +124,7 @@ pipeline {
 					echo "==> Waiting for new container to become healthy"
 
 						i=1
-						while [ "$i" -le 20 ]; do
+						while [ "${i:-0}" -le 20 ]; do
 							if docker exec spring-web-app-$INACTIVE curl -f http://localhost:8080 >/dev/null 2>&1; then
 								echo "New version is healthy"
 									break
@@ -133,10 +133,11 @@ pipeline {
 									i=$((i+1))
 									done
 
-									if [ "$i" -gt 20 ]; then
+									if [ "${i:-0}" -gt 20 ]; then
 										echo "ERROR: New version did not become healthy"
 											exit 1
 											fi
+
 
 											echo "==> Switching Nginx to new color"
 											sed -i "s/spring-web-app-$ACTIVE/spring-web-app-$INACTIVE/" /home/ubuntu/nginx/default.conf
@@ -155,7 +156,7 @@ pipeline {
 				expression { params.DEPLOY }
 			}
 			steps {
-				sh '''
+				sh '
 					if [ "${ENV}" = "local" ]; then
 						URL=http://localhost
 					else
