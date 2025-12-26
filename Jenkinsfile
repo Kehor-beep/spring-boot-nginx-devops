@@ -75,30 +75,31 @@ pipeline {
             }
         }
 
-        stage('Deploy to EC2') {
-            when {
-                expression { params.DEPLOY == true }
-            }
-            steps {
-                sshagent(['ec2-ssh-key']) {
-                    sh '''
-        ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 << 'EOF'
-        echo "Deploying image: camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}"
+stage('Deploy to EC2') {
+    when {
+        expression { params.DEPLOY == true }
+    }
+    steps {
+        sshagent(['ec2-ssh-key']) {
+            sh '''
+ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 << 'EOF'
+echo "Deploying image: camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}"
 
-        docker pull camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}
+docker pull camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}
 
-        docker stop spring-app || true
-        docker rm spring-app || true
+docker stop spring-app || true
+docker rm spring-app || true
 
-        docker run -d \
-          --name spring-app \
-          -p 8080:8080 \
-          camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}
-        EOF
-        '''
-                }
-            }
+docker run -d \
+  --name spring-app \
+  -p 8080:8080 \
+  camildockerhub/spring-boot-nginx-app:${BUILD_NUMBER}
+EOF
+'''
         }
+    }
+}
+
 
         stage('Health Check') {
             when {
