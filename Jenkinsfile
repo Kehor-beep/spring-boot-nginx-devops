@@ -87,8 +87,8 @@ ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 "
 
   docker pull ${IMAGE_NAME}:${IMAGE_TAG};
 
-  docker stop spring-app || true;
-  docker rm spring-app || true;
+  docker stop spring-web-app || true;
+  docker rm spring-web-app|| true;
 
 docker run -d \
   --name spring-web-app \
