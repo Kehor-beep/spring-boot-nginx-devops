@@ -146,5 +146,3 @@ stage('Health Check') {
 								'''
 	}
 }
-}
-
