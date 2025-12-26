@@ -80,7 +80,7 @@ pipeline {
                 expression { params.DEPLOY == true }
             }
             steps {
-                sshagent(['ubuntu']) {
+                sshagent(['ec2-ssh-key']) {
                     sh """
                     ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 << EOF
 
