@@ -90,10 +90,12 @@ ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 "
   docker stop spring-app || true;
   docker rm spring-app || true;
 
-  docker run -d \
-    --name spring-web-app \
-    -p 8080:8080 \
-    ${IMAGE_NAME}:${IMAGE_TAG};
+docker run -d \
+  --name spring-web-app \
+  --network app-network \
+  -p 8080:8080 \
+  camildockerhub/spring-boot-nginx-app:${IMAGE_TAG}
+
 "
 """
         }
