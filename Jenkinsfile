@@ -4,8 +4,7 @@ pipeline {
     environment {
         IMAGE_NAME = "camildockerhub/spring-boot-nginx-app"
         IMAGE_TAG  = "${BUILD_NUMBER}"
-        }
-
+    }
 
     parameters {
         booleanParam(
@@ -23,10 +22,6 @@ pipeline {
             defaultValue: '',
             description: 'Rollback to build number (optional)'
         )
-    }
-
-    environment {
-        DEPLOY_VERSION = "${params.ROLLBACK_VERSION ?: BUILD_NUMBER}"
     }
 
     stages {
@@ -68,6 +63,9 @@ pipeline {
                       docker tag spring-boot-nginx-app:${BUILD_NUMBER} \
                         $DOCKER_USER/spring-boot-nginx-app:${BUILD_NUMBER}
 
+                      docker tag spring-boot-nginx-app:latest \
+                        $DOCKER_USER/spring-boot-nginx-app:latest
+
                       docker push $DOCKER_USER/spring-boot-nginx-app:${BUILD_NUMBER}
                       docker push $DOCKER_USER/spring-boot-nginx-app:latest
 
@@ -86,7 +84,7 @@ pipeline {
                     sh """
                     ssh -o StrictHostKeyChecking=no ubuntu@13.48.147.254 << EOF
 
-                      echo "Using image: ${IMAGE_NAME}:${IMAGE_TAG}"
+                      echo "Deploying image: ${IMAGE_NAME}:${IMAGE_TAG}"
 
                       docker pull ${IMAGE_NAME}:${IMAGE_TAG}
 
@@ -104,21 +102,16 @@ pipeline {
             }
         }
 
-
         stage('Health Check') {
             when {
-                expression { params.DEPLOY }
+                expression { params.DEPLOY == true }
             }
             steps {
                 sh '''
-                  if [ "${ENV}" = "local" ]; then
-                    URL=http://localhost
-                  else
-                    URL=http://13.48.147.254
-                  fi
+                  URL=http://13.48.147.254
 
                   i=1
-                  while [ "${i:-0}" -le 20 ]; do
+                  while [ "$i" -le 20 ]; do
                     if curl -f "$URL" >/dev/null 2>&1; then
                       echo "Application is healthy"
                       exit 0
