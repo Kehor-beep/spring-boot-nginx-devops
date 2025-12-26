@@ -19,6 +19,10 @@ pipeline {
         )
     }
 
+    environment {
+        DEPLOY_VERSION = "${params.ROLLBACK_VERSION ?: BUILD_NUMBER}"
+    }
+
     stages {
 
         stage('Clean Workspace') {
@@ -66,9 +70,7 @@ pipeline {
                 }
             }
         }
-   environment {
-        DEPLOY_VERSION = "${params.ROLLBACK_VERSION ?: BUILD_NUMBER}"
-    }
+
         stage('Deploy to EC2') {
             when {
                 allOf {
