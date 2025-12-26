@@ -141,12 +141,28 @@ pipeline {
 
 											echo "==> Switching Nginx to new color"
 											sed -i "s/spring-web-app-$ACTIVE/spring-web-app-$INACTIVE/" /home/ubuntu/nginx/default.conf
-											docker exec nginx nginx -s reload
 
-											echo "==> Blue-Green switch complete"
+											echo "==> Ensuring nginx is running"
 
-											"
-											'''
+											if ! docker ps --format '{{.Names}}' | grep -q '^nginx$'; then
+												echo "Nginx not running, starting it"
+													docker run -d \
+													--name nginx \
+													--network app-network \
+													-p 80:80 \
+													-v /home/ubuntu/nginx:/etc/nginx/conf.d \
+													nginx:latest
+											else
+												echo "Nginx already running"
+													fi
+
+													echo "==> Reloading nginx"
+													docker exec nginx nginx -s reload
+
+													echo "==> Blue-Green switch complete"
+
+													"
+													'''
 				}
 			}
 		}
