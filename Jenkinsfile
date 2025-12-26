@@ -75,7 +75,7 @@ pipeline {
             }
         }
 
-sstage('Deploy to EC2') {
+stage('Deploy to EC2') {
      when {
          expression { params.DEPLOY == true }
      }
